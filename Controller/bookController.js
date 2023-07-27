@@ -1,54 +1,84 @@
-var queries = require('../database/query');
-var dbConnection = require('../database/connection');
-var genStoreCode = require('../util/generatorString');
+let queries = require('../database/query');
+let dbConnection = require('../database/connection');
+let genStoreCode = require('../util/generatorString');
+let Logger = require('../services/loggerService');
+let auditService = require('../audit/auditService');
+let auditAction = require('../audit/auditAction');
+let APIError = require('../error/apiError');
+let errorStatus = require('../error/errorStatus');
+let errorType = require('../error/errorType');
+const logger = new Logger('book.controller');
 
 exports.getBookList = async (req, res) => {
+  let auditOn = genStoreCode.dateFormat();
   try {
-    var bookListQuery = queries.queryList.GET_BOOK_LIST_QUERY;
-    var result = await dbConnection.dbQuery(bookListQuery);
-
+    let bookListQuery = queries.queryList.GET_BOOK_LIST_QUERY;
+    let result = await dbConnection.dbQuery(bookListQuery);
+    logger.info('return Book List', result.rows);
+    auditService.prepareAudit(
+      auditAction.actionList.GET_BOOK_LIST,
+      result.rows,
+      null,
+      'elshayeb',
+      auditOn
+    );
     return res.status(200).send(JSON.stringify(result.rows));
   } catch (err) {
     console.log('book list : ' + err);
+    let errorMessage = 'failed to get books' + err;
+    auditService.prepareAudit(
+      auditAction.actionList.GET_BOOK_LIST,
+      null,
+      JSON.stringify(errorMessage),
+      'elshayeb',
+      auditOn
+    );
     return res.status(500).send({ error: 'failed to list book' });
   }
 };
 
-exports.getBookDetials = async (req, res) => {
+exports.getBookDetails = async (req, res) => {
   try {
-    var bookId = req.params.bookId;
-    var bookDetialsQuery = queries.queryList.GET_BOOK_DETAILS_QUERY;
-    var result = await dbConnection.dbQuery(bookDetialsQuery, [bookId]);
-
+    let bookId = req.params.bookId;
+    console.log('Book Id: ' + bookId);
+    if (isNaN(bookId))
+      throw new APIError(
+        errorType.API_ERROR,
+        errorStatus.INTERNAL_SERVER_ERROR,
+        'Invalid bookId , is not a number , bookId value is : ' + bookId,
+        true
+      );
+    let bookDetialsQuery = queries.queryList.GET_BOOK_DETAILS_QUERY;
+    let result = await dbConnection.dbQuery(bookDetialsQuery, [bookId]);
     return res.status(200).send(JSON.stringify(result.rows[0]));
   } catch (err) {
-    console.log('book list detials : ' + err);
+    console.log('book list detials : ' + err.description);
+    if (err.name === errorType.SQL_INJECTION_ERROR)
+      logger.error('Failed to get Book Details : ', JSON.stringify(err));
     return res.status(500).send({ error: 'failed to list book details' });
   }
 };
 
 exports.saveBook = async (req, res) => {
   try {
-    var createdBy = 'admin';
-    var createdOn = new Date();
+    let createdBy = 'admin';
+    let createdOn = new Date();
 
     // request body
-    var title = req.body.title;
-    var description = req.body.description;
-    var author = req.body.author;
-    var publisher = req.body.publisher;
-    var pages = req.body.pages;
-    var storeCode = req.body.storeCode;
+    let title = req.body.title;
+    let description = req.body.description;
+    let author = req.body.author;
+    let publisher = req.body.publisher;
+    let pages = req.body.pages;
+    let storeCode = req.body.storeCode;
 
     if (!title || !author || !publisher || !storeCode) {
-      return res
-        .status(500)
-        .send({
-          error: 'title , author , publisher , storeCode should not be empty',
-        });
+      return res.status(500).send({
+        error: 'title , author , publisher , storeCode should not be empty',
+      });
     }
 
-    values = [
+    let values = [
       title,
       description,
       author,
@@ -59,7 +89,7 @@ exports.saveBook = async (req, res) => {
       createdOn,
     ];
 
-    var saveBookQuery = queries.queryList.SAVE_BOOK_QUERY;
+    let saveBookQuery = queries.queryList.SAVE_BOOK_QUERY;
     await dbConnection.dbQuery(saveBookQuery, values);
     return res.status(201).send('Successfully adding new book ');
   } catch (err) {
@@ -68,30 +98,27 @@ exports.saveBook = async (req, res) => {
   }
 };
 
-
-exports.updateBook = async (req,res) => {
-
+exports.updateBook = async (req, res) => {
   try {
-    var createdBy = 'admin';
-    var createdOn = new Date();
+    let createdBy = 'admin';
+    let createdOn = new Date();
 
     // request body
-    var bookId = req.body.bookId;
-    var title = req.body.title;
-    var description = req.body.description;
-    var author = req.body.author;
-    var publisher = req.body.publisher;
-    var pages = req.body.pages;
-    var storeCode = req.body.storeCode;
+    let bookId = req.body.bookId;
+    let title = req.body.title;
+    let description = req.body.description;
+    let author = req.body.author;
+    let publisher = req.body.publisher;
+    let pages = req.body.pages;
+    let storeCode = req.body.storeCode;
 
-    if ( !bookId || !title || !author || !publisher || !storeCode) {
-      return res
-        .status(500)
-        .send({
-          error: 'bookId , title , author , publisher , storeCode should not be empty',
-        });
+    if (!bookId || !title || !author || !publisher || !storeCode) {
+      return res.status(500).send({
+        error:
+          'bookId , title , author , publisher , storeCode should not be empty',
+      });
     }
-    values = [
+    let values = [
       title,
       description,
       author,
@@ -100,37 +127,36 @@ exports.updateBook = async (req,res) => {
       storeCode,
       createdBy,
       createdOn,
-      bookId
+      bookId,
     ];
 
-    var updateBookQuery = queries.queryList.UPDATE_BOOK_QUERY;
+    let updateBookQuery = queries.queryList.UPDATE_BOOK_QUERY;
 
-    await dbConnection.dbQuery(updateBookQuery,values);
+    await dbConnection.dbQuery(updateBookQuery, values);
 
     return res.status(200).send('Successfully update book title : ' + title);
-
   } catch (err) {
     console.log('Error : ' + err);
-    return res.status(500).send({ error: 'Failed to update book' }); 
+    return res.status(500).send({ error: 'Failed to update book' });
   }
 };
 
-
-exports.deleteBook = async (req,res) => {
-
+exports.deleteBook = async (req, res) => {
   try {
-    var bookId = req.params.bookId;
+    let bookId = req.params.bookId;
 
     if (!bookId) {
-      return res.status(500).send("bookId should not be empty");
+      return res.status(500).send('bookId should not be empty');
     }
 
-    var deleteBookQuery = queries.queryList.DELETE_BOOK_QUERY;
-    await dbConnection.dbQuery(deleteBookQuery,[bookId]);
+    let deleteBookQuery = queries.queryList.DELETE_BOOK_QUERY;
+    await dbConnection.dbQuery(deleteBookQuery, [bookId]);
 
-    return res.status(200).send("successfully deleteing book")
+    return res.status(200).send('successfully deleteing book');
   } catch (err) {
     console.log('Error : ' + err);
-    return res.status(500).send({ error: 'Failed to delete book with id : ' + bookId });
+    return res
+      .status(500)
+      .send({ error: 'Failed to delete book with id : ' + bookId });
   }
 };
